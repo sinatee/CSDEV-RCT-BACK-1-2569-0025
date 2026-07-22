@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ItemType {
+  LOST
+  FOUND
+}
+
+enum Status {
+  OPEN
+  CLOSED
+}
+
+model User {
+  id        Int     @id @default(autoincrement())
+  username  String  @unique
+  password  String
+  items     Item[]
+  createdAt DateTime @default(now())
+}
+
+model Item {
+  id          Int      @id @default(autoincrement())
+  type        ItemType
+  title       String
+  description String
+  location    String
+  eventDate   DateTime
+  status      Status   @default(OPEN)
+  image       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ownerId     Int
+  owner       User     @relation(fields: [ownerId], references: [id])
+}
