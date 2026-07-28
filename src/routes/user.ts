@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { prisma } from '../db.js'
 import { authMiddlewares } from '../middlewares/authMiddleware.js'
+import { describeRoute } from 'hono-openapi'
 
 type Env = {
   Variables: {
@@ -13,7 +14,55 @@ type Env = {
 
 export const user = new Hono<Env>()
 
-user.get('/@me/items', authMiddlewares, async (c) => {
+user.get(
+    '/@me/items',
+    describeRoute({
+        tags: ['User'],
+        summary: 'Get my items',
+        description: 'list all notices created by user',
+        security: [{ bearerAuth: [] }],
+        responses: {
+            200: {
+                description: 'List of items created by current user',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'number', example: 1 },
+                                    type: { type: 'string', enum: ['LOST', 'FOUND'], example: 'LOST' },
+                                    title: { type: 'string', example: 'find a Dog' },
+                                    description: { type: 'string', example: 'Big Black Dog' },
+                                    location: { type: 'string', example: 'Doggy Land' },
+                                    eventDate: { type: 'string', format: 'date-time' },
+                                    image: { type: 'string', example: 's3-key.jpg' },
+                                    ownerId: { type: 'number', example: 123 },
+                                    imageUrl: { type: 'string', example: 'http://localhost:6767/api/items/1/image' }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            500: {
+                description: 'Server Error',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'Failed to fetch your items' },
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }),
+    authMiddlewares, async (c) => {
     try
     {
         const currentUser = c.get('user')

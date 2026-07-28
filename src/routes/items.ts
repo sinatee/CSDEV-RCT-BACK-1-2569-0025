@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { prisma } from '../db.js'
 import { authMiddlewares } from '../middlewares/authMiddleware.js'
 import { uploadToS3, getFromS3, deleteFromS3 } from '../lib/s3.js'
+import { describeRoute } from 'hono-openapi'
 
 type Env = {
   Variables: {
@@ -15,7 +16,89 @@ type Env = {
 export const items =  new Hono<Env>()
 
 // add item
-items.post('/', authMiddlewares, async (c) => {
+items.post(
+    '/',
+    describeRoute({
+        tags: ['Items'],
+        summary: 'Create notice',
+        description: 'Create notice (require login)',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+            content: {
+                'multipart/form-data': {
+                    schema: {
+                        type: 'object',
+                        properties: {
+                            type: { type: 'string', enum: ['LOST', 'FOUND'] },
+                            title: { type: 'string', example: 'find a Dog' },
+                            description: { type: 'string', example: 'Big Black Dog' },
+                            location: { type: 'string', example: 'Doggy Land' },
+                            eventDate: { type: 'string', format: 'date', example: '2026-07-29' },
+                            image: { type: 'string', format: 'binary' },
+                        },
+                        required: ['type', 'title', 'description', 'location', 'eventDate', 'image'],
+                    },
+                },
+            },
+        },
+        responses: {
+            201: {
+                description: 'Notice Successfully Created',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'ok' },
+                                message: { type: 'string', example: 'Notice Successfully Created' },
+                                data: { 
+                                    type: 'object',
+                                    properties: {
+                                        type: { type: 'string', enum: ['LOST', 'FOUND'] },
+                                        title: { type: 'string', example: 'find a Dog' },
+                                        description: { type: 'string', example: 'Big Black Dog' },
+                                        location: { type: 'string', example: 'Doggy Land' },
+                                        eventDate: { type: 'string', format: 'date', example: '2026-07-29T00:00:00.000Z' },
+                                        image: { type: 'string', example: 's3-image-key.jpg' },
+                                        ownerId: { type: 'number', example: 123},
+                                    }
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            400: {
+                description: 'fill more informatoin na',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'fill more informatoin na' },
+                            },
+                        },
+                    },
+                },
+            },
+            500: {
+                description: 'Failed to Create Notice',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'Failed to Create Notice' },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+    }),
+    authMiddlewares, async (c) => {
     try
     {
         const body = await c.req.parseBody()
@@ -69,7 +152,59 @@ items.post('/', authMiddlewares, async (c) => {
 })
 
 // list items
-items.get('/', async (c) => {
+items.get(
+    '/', 
+    describeRoute({
+        tags: ['Items'],
+        summary: 'List all items',
+        description: 'Get all notices with pagination and filter',
+        parameters: [
+            { name: 'search', in: 'query', required: false, schema: { type: 'string', example: 'Dog' } },
+            { name: 'type', in: 'query', required: false, schema: { type: 'string', enum: ['LOST', 'FOUND'] } },
+            { name: 'page', in: 'query', required: false, schema: { type: 'number', default: 1 } },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'number', default: 10 } },
+        ],
+        responses: {
+            200: {
+                description: 'List of items',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    id: { type: 'number', example: 1 },
+                                    type: { type: 'string', enum: ['LOST', 'FOUND'], example: 'LOST' },
+                                    title: { type: 'string', example: 'find a Dog' },
+                                    description: { type: 'string', example: 'Big Black Dog' },
+                                    location: { type: 'string', example: 'Doggy Land' },
+                                    eventDate: { type: 'string', format: 'date-time' },
+                                    image: { type: 'string', example: 's3-key.jpg' },
+                                    ownerId: { type: 'number', example: 123 },
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            500: {
+                description: 'Failed to fetch items',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'Failed to fetch items' },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+    }),
+    async (c) => {
     try
     {
         const search = c.req.query('search')
@@ -111,7 +246,89 @@ items.get('/', async (c) => {
 })
 
 // get by id
-items.get('/:id', async (c) => {
+items.get(
+    '/:id',
+    describeRoute({
+        tags: ['Items'],
+        summary: 'Get item by ID',
+        description: 'Fetch details of a specific notice by its ID',
+        parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'number', example: 1 } },
+        ],
+        responses: {
+            200: {
+                description: 'Item details',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                id: { type: 'number', example: 1 },
+                                type: { type: 'string', enum: ['LOST', 'FOUND'], example: 'LOST' },
+                                title: { type: 'string', example: 'find a Dog' },
+                                description: { type: 'string', example: 'Big Black Dog' },
+                                location: { type: 'string', example: 'Doggy Land' },
+                                eventDate: { type: 'string', format: 'date-time' },
+                                image: { type: 'string', example: 's3-key.jpg' },
+                                ownerId: { type: 'number', example: 123 },
+                                imageUrl: { type: 'string', example: 'http://localhost:6767/api/items/1/image' },
+                                owner: {
+                                    type: 'object',
+                                    properties: {
+                                        id: { type: 'number', example: 123 },
+                                        username: { type: 'string', example: 'john_doe' },
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            400: {
+                description: 'Invalid ID parameter',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'i want number na' },
+                            },
+                        },
+                    },
+                },
+            },
+            404: {
+                description: 'Item not found',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'Item not found na' },
+                            },
+                        },
+                    },
+                },
+            },
+            500: {
+                description: 'Server Error',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'Failed to fetch item' },
+                            },
+                        },
+                    },
+                },
+            }
+        }
+    }),
+    async (c) => {
     try
     {
         const id = Number(c.req.param('id'))
@@ -168,7 +385,69 @@ items.get('/:id', async (c) => {
 })
 
 // get image by id
-items.get('/:id/image', async (c) => {
+items.get(
+    '/:id/image',
+    describeRoute({
+        tags: ['Items'],
+        summary: 'Get item image',
+        description: 'Fetch the image file from S3 bucket',
+        parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'number', example: 1 } },
+        ],
+        responses: {
+            200: {
+                description: 'Image stream',
+                content: {
+                    'image/*': {
+                        schema: { type: 'string', format: 'binary' }
+                    }
+                }
+            },
+            400: {
+                description: 'Invalid ID parameter',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'i want number na' },
+                            },
+                        },
+                    },
+                },
+            },
+            404: {
+                description: 'Image not found',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'dont find image na' },
+                            },
+                        },
+                    },
+                },
+            },
+            500: {
+                description: 'Server Error',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'Failed to fetch image' },
+                            },
+                        },
+                    },
+                },
+            }
+        }
+    }),
+    async (c) => {
     try
     {
         const id = Number(c.req.param('id'))
@@ -214,7 +493,7 @@ items.get('/:id/image', async (c) => {
         c.header('Content-Type', contentType)
 
         const stream = s3Obj.Body.transformToWebStream()
-        return c.body(stream)
+        return c.body(stream, 200)
     }
     catch (error)
     {
@@ -226,8 +505,119 @@ items.get('/:id/image', async (c) => {
     }
 })
 
-// change info in item table
-items.patch('/:id', authMiddlewares, async (c) => {
+// change info of item in table
+items.patch(
+    '/:id', 
+    describeRoute({
+        tags: ['Items'],
+        summary: 'Update notice',
+        description: 'Update notice information (require login & must be owner)',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'number', example: 1 } },
+        ],
+        requestBody: {
+            content: {
+                'multipart/form-data': {
+                    schema: {
+                        type: 'object',
+                        properties: {
+                            type: { type: 'string', enum: ['LOST', 'FOUND'] },
+                            title: { type: 'string' },
+                            description: { type: 'string' },
+                            location: { type: 'string' },
+                            eventDate: { type: 'string', format: 'date' },
+                            status: { type: 'string', enum: ['OPEN', 'CLOSED'] },
+                            image: { type: 'string', format: 'binary' },
+                        },
+                    },
+                },
+            },
+        },
+        responses: {
+            200: {
+                description: 'Notice Successfully Updated',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'ok' },
+                                message: { type: 'string', example: 'Notice Successfully Updated' },
+                                data: {
+                                    type: 'object',
+                                    properties: {
+                                        id: { type: 'number' },
+                                        type: { type: 'string' },
+                                        title: { type: 'string' },
+                                        description: { type: 'string' },
+                                        status: { type: 'string' },
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            400: {
+                description: 'Invalid ID parameter',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'i want number na' },
+                            },
+                        },
+                    },
+                },
+            },
+            403: {
+                description: 'Forbidden - Not the owner',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'who are u!!! this is not your item na' },
+                            },
+                        },
+                    },
+                },
+            },
+            404: {
+                description: 'Item not found',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'dont have this item na' },
+                            },
+                        },
+                    },
+                },
+            },
+            500: {
+                description: 'Server Error',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'Failed to Update Notice' },
+                            },
+                        },
+                    },
+                },
+            }
+        }
+    }),
+    authMiddlewares, async (c) => {
     try
     {
         const id = Number(c.req.param('id'))
@@ -313,7 +703,90 @@ items.patch('/:id', authMiddlewares, async (c) => {
 })
 
 // delete by item id
-items.delete('/:id', authMiddlewares, async (c) => {
+items.delete(
+    '/:id',
+    describeRoute({
+        tags: ['Items'],
+        summary: 'Delete notice',
+        description: 'Delete notice and S3 image (require login & must be owner)',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'number', example: 1 } },
+        ],
+        responses: {
+            200: {
+                description: 'Notice Successfully Deleted',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'ok' },
+                                message: { type: 'string', example: 'Notice Successfully Deleted' },
+                            },
+                        },
+                    },
+                },
+            },
+            400: {
+                description: 'Invalid ID parameter',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'i want number na' },
+                            },
+                        },
+                    },
+                },
+            },
+            403: {
+                description: 'Forbidden - Not the owner',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'who are u!!! this is not your item na' },
+                            },
+                        },
+                    },
+                },
+            },
+            404: {
+                description: 'Item not found',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'dont have this item na' },
+                            },
+                        },
+                    },
+                },
+            },
+            500: {
+                description: 'Server Error',
+                content: {
+                    'application/json': {
+                        schema: {
+                            type: 'object',
+                            properties: {
+                                status: { type: 'string', example: 'mai ok' },
+                                message: { type: 'string', example: 'Failed to Delete Notice' },
+                            },
+                        },
+                    },
+                },
+            }
+        }
+    }),
+    authMiddlewares, async (c) => {
     try
     {
         const id = Number(c.req.param('id'))
