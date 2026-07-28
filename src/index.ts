@@ -45,9 +45,11 @@ app.get(
   })
 )
 
-serve({
-  fetch: app.fetch,
-  port: 6767
-}, (info) => {
-  console.log(`Server is running on http://localhost:${info.port}`)
-})
+// serve({
+//   fetch: app.fetch,
+//   port: 6767
+// }, (info) => {
+//   console.log(`Server is running on http://localhost:${info.port}`)
+// })
+
+export default app
