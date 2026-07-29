@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "prisma generate",
+    "build": "prisma generate && tsc",
   "postinstall": "prisma generate",
     "start": "node dist/index.js"
   },
